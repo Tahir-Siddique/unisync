@@ -127,7 +127,7 @@ async def sync(request: Request):
 
 async def perform_sync_thread(session_id, username, password):
     try:
-        browser, playwright = await create_playwright_browser(headless=False)
+        browser, playwright = await create_playwright_browser(headless=True)
         page = await browser.new_page()
         session_data[session_id] = {
             'browser': browser,
