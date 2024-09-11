@@ -52,20 +52,30 @@
             // Show the loading message
             document.getElementById('loading').style.display = 'block';
             document.getElementById('login-submit').disabled = true;
-
-            fetch('/perform-sync?' + new URLSearchParams(formData)).then(response => response.json()).then(data => {
+            const formDataObject = {};
+            formData.forEach((value, key) => formDataObject[key] = value);
+            
+            fetch('/perform-sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formDataObject),  // Send form data as JSON
+            })
+            .then(response => response.json())
+            .then(data => {
                 if (data.status == "authentication_failed") {
-                    alert(data.message)
-                    location.reload()
+                    alert(data.message);
+                    location.reload();
                 }
-                if (data.status === 'otp_required') {
+                if (data.status === 'otp_check_started') {
                     // Hide loading and login form, show OTP section
                     document.getElementById('login-form').style.display = 'none';
                     document.getElementById('otp-section').style.display = 'block';
-
+            
                     // Set the session ID
                     document.getElementById('session-id').value = data.session_id;
-
+            
                     startScreenshotUpdate(data.session_id);  // Start updating screenshots
                 }
             });
@@ -75,55 +85,51 @@
             event.preventDefault();
             const formData = new FormData(event.target);
 
-            fetch('/submit-otp', {
-                method: 'POST',
-                body: formData
-            }).then(response => response.json()).then(data => {
+            fetch(`/submit-otp?session_id=${formData.get("session_id")}&otp=${formData.get("otp")}`).then(response => response.json()).then(data => {
                 if (data.status === 'success') {
                     // Hide OTP section, show loading message again
                     document.getElementById('otp-section').style.display = 'none';
-                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').style.display = 'none';
 
-                    // Now fetch the results
-                    fetch('/get-results?session_id=' + formData.get('session_id')).then(response => response.json()).then(resultData => {
-                        document.getElementById('loading').style.display = 'none';
-                        document.getElementById('results-section').style.display = 'block';
+                    // Clear previous results
+                    const resultsContent = document.getElementById('results-content');
+                    resultsContent.innerHTML = '';
 
-                        // Clear previous results
-                        const resultsContent = document.getElementById('results-content');
-                        resultsContent.innerHTML = '';
+                    // Loop through the courses and display emails
+                    data.data.forEach(course => {
+                        const courseDiv = document.createElement('div');
+                        courseDiv.classList.add('course');
+                        courseDiv.innerHTML = `<h2>${course.course_name}</h2><div class="students"><ul></ul></div>`;
 
-                        // Loop through the courses and display emails
-                        resultData.all_email_column_data.forEach(course => {
-                            const courseDiv = document.createElement('div');
-                            courseDiv.classList.add('course');
-                            courseDiv.innerHTML = `<h2>${course.course_name}</h2><div class="students"><ul></ul></div>`;
-
-                            // Add emails to the course div
-                            const emailList = courseDiv.querySelector('ul');
-                            course.students.forEach(email => {
-                                const emailItem = document.createElement('li');
-                                emailItem.innerText = email;
-                                emailList.appendChild(emailItem);
-                            });
-
-                            // Append the course div to results content
-                            resultsContent.appendChild(courseDiv);
+                        // Add emails to the course div
+                        const emailList = courseDiv.querySelector('ul');
+                        course.students.forEach(email => {
+                            const emailItem = document.createElement('li');
+                            emailItem.innerText = email;
+                            emailList.appendChild(emailItem);
                         });
+
+                        // Append the course div to results content
+                        resultsContent.appendChild(courseDiv);
                     });
                 }
             });
         });
-
         function startScreenshotUpdate(sessionId) {
             setInterval(() => {
-                fetch('/screenshot/' + sessionId)
-                    .then(response => response.blob())
-                    .then(imageBlob => {
-                        const imageUrl = URL.createObjectURL(imageBlob);
-                        if (imageUrl) {
-                            document.getElementById('screenshot').src = imageUrl;
+                fetch(`/screenshot?session_id=${sessionId}`)  // Use query parameters for the session ID
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
                         }
+                        return response.json();  // Parse the response as JSON
+                    })
+                    .then(data => {
+                        const imageUrl = data.screenshot;  // Get the base64 image data from the response
+                        document.getElementById('screenshot').src = imageUrl;  // Update the image element
+                    })
+                    .catch(error => {
+                        console.error('Error fetching screenshot:', error);  // Log any errors
                     });
             }, 1000);  // Update every second
         }
